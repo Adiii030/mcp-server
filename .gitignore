@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+*.log
+*.tsbuildinfo
+.env
+.env.example
+client/build/
+server/build/
+client/node_modules/
+server/node_modules/
