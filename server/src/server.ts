@@ -10,6 +10,7 @@ import {
   JSONRPCError,
   InitializeRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { randomUUID } from "crypto";
 import { Request, Response } from "express";
 
@@ -17,6 +18,20 @@ const SESSION_ID_HEADER_NAME = "mcp-session-id";
 const JSON_RPC = "2.0";
 const NWS_API_BASE = "https://api.weather.gov";
 const USER_AGENT = "weather-app/1.0";
+
+// Zod schemas for tool input validation
+const GetAlertsInputSchema = z.object({
+  state: z.string().length(2, "State code must be two letters").regex(/^[A-Z]{2}$/, "State code must be uppercase letters"),
+});
+
+const GetForecastInputSchema = z.object({
+  latitude: z.number().min(-90, "Latitude must be >= -90").max(90, "Latitude must be <= 90"),
+  longitude: z.number().min(-180, "Longitude must be >= -180").max(180, "Longitude must be <= 180"),
+});
+
+// Type definitions for validated inputs
+type GetAlertsInput = z.infer<typeof GetAlertsInputSchema>;
+type GetForecastInput = z.infer<typeof GetForecastInputSchema>;
 
 // Helper function for making NWS API requests
 async function makeNWSRequest<T>(url: string): Promise<T | null> {
@@ -245,7 +260,20 @@ export class MCPServer {
         }
 
         if (toolName === this.getAlertsToolName) {
-          const state = args.state as string;
+          // Validate input using Zod schema
+          const validationResult = GetAlertsInputSchema.safeParse(args);
+          if (!validationResult.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Invalid input: ${validationResult.error.message}`,
+                },
+              ],
+            };
+          }
+
+          const { state } = validationResult.data;
           const stateCode = state.toUpperCase();
           const alertsUrl = `${NWS_API_BASE}/alerts?area=${stateCode}`;
           const alertsData = await makeNWSRequest<AlertsResponse>(alertsUrl);
@@ -289,8 +317,20 @@ export class MCPServer {
         }
 
         if (toolName === this.getForecastToolName) {
-          const latitude = args.latitude as number;
-          const longitude = args.longitude as number;
+          // Validate input using Zod schema
+          const validationResult = GetForecastInputSchema.safeParse(args);
+          if (!validationResult.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Invalid input: ${validationResult.error.message}`,
+                },
+              ],
+            };
+          }
+
+          const { latitude, longitude } = validationResult.data;
           // Get grid point data
           const pointsUrl = `${NWS_API_BASE}/points/${latitude.toFixed(
             4
